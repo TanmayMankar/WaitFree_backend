@@ -12,16 +12,30 @@ const app = express()
 // 3. Create the HTTP server wrapper around your Express app
 const server = http.createServer(app)
 
-// 4. Initialize Socket.IO with identical CORS settings as your app
-const io = new Server(server, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true,
+// Define allowed origins dynamically
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://wait-free-frontend.vercel.app",
+  ...(process.env.CLIENT_URL ? [process.env.CLIENT_URL.replace(/\/$/, "")] : [])
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin.replace(/\/$/, ""))) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
   },
+  credentials: true,
+};
+
+// 4. Initialize Socket.IO with dynamic CORS settings
+const io = new Server(server, {
+  cors: corsOptions,
 });
 
-// 5. ATTACH IO TO REQ OBJECT: This is the magic trick.
-// Now, inside your roomRoutes or patientRoutes controllers, you can call `req.io.emit()`
+// 5. ATTACH IO TO REQ OBJECT
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -29,12 +43,7 @@ app.use((req, res, next) => {
 
 app.use(express.json())
 app.use(cookieParser())
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
 
 // Basic Socket connection listener for debugging
 io.on('connection', (socket) => {
@@ -61,5 +70,5 @@ app.use("/api/auth", authRoutes)
 app.use("/api/room", roomRoutes)
 app.use("/api/patient", patientRoutes)
 
-// 6. CHANGE THE EXPORT: Export the 'server' wrapper instead of just 'app'
+// 6. EXPORT THE SERVER WRAPPER
 module.exports = server
